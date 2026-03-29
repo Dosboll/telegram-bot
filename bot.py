@@ -9,7 +9,7 @@ BASE_URL = "https://agropraktika.eu/vacancies"
 CHECK_INTERVAL = 60
 PAGES = 2
 
-bot = Bot(token=8787982429:AAGpfzIibK7e58YtvAl6g5m1EG2sZtEdFYA)
+bot = Bot(token="8787982429:AAGpfzIibK7e58YtvAl6g5m1EG2sZtEdFYA")
 
 previous_status = {}
 
