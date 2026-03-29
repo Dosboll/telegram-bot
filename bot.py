@@ -3,7 +3,7 @@ from telegram import Bot
 import aiohttp
 
 BOT_TOKEN = "8787982429:AAGpfzIibK7e58YtvAl6g5m1EG2sZtEdFYA"
-CHAT_ID = "6318865778"
+CHAT_ID = 6318865778
 
 BASE_URL = "https://agropraktika.eu/vacancies"
 CHECK_INTERVAL = 90
