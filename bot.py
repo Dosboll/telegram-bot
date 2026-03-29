@@ -1,111 +1,118 @@
 import asyncio
 from telegram import Bot
 import aiohttp
-from datetime import datetime
 
 BOT_TOKEN = "8787982429:AAGpfzIibK7e58YtvAl6g5m1EG2sZtEdFYA"
-CHAT_ID = 6318865778
+CHAT_ID = > 6318865778
 
 BASE_URL = "https://agropraktika.eu/vacancies"
-CHECK_INTERVAL = 100
-PAGES = 2
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-}
+CHECK_INTERVAL = 90
+PAGES = 3
 
 bot = Bot("8787982429:AAGpfzIibK7e58YtvAl6g5m1EG2sZtEdFYA")
 
 previous_status = {}
+open_confirm = {}
 
-def log(text):
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {text}", flush=True)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
 
 async def get_status(session):
     status = {}
 
     for page in range(1, PAGES + 1):
         url = f"{BASE_URL}?page={page}"
-        log(f"Проверка страницы {page}")
 
         try:
             async with session.get(url, headers=HEADERS) as response:
+                print("Страница", page, "Статус:", response.status)
 
-                # 🚫 если сайт блокирует
-                if response.status == 403:
-                    log("Ошибка 403 — сайт блокирует запрос")
-                    return None
+                # защита от 403 / 404
+                if response.status != 200:
+                    continue
 
                 html = await response.text()
-                html_lower = html.lower()
 
-                # защита от пустых/битых страниц
-                if len(html) < 1000:
-                    log(f"Страница {page}: подозрительно маленький HTML")
-                    return None
+                # защита от страниц-ошибок
+                if len(html) < 5000:
+                    print("Маленький HTML, пропуск")
+                    continue
 
-                # проверка статуса
-                if "регистрация временно приостановлена" in html_lower:
-                    status[page] = 1
-                    log(f"Страница {page}: закрыто")
+                if "Регистрация временно приостановлена" in html:
+                    status[page] = 1  # закрыто
                 else:
-                    status[page] = 0
-                    log(f"Страница {page}: ВОЗМОЖНО ОТКРЫТО")
+                    status[page] = 0  # открыто
 
         except Exception as e:
-            log(f"Ошибка при запросе страницы {page}: {e}")
-            return None
+            print("Ошибка:", e)
 
     return status
 
 
+async def notify_open(page):
+    # 3 уведомления
+    for i in range(3):
+        await bot.send_message(
+            chat_id=CHAT_ID,
+            text="🚨🚨🚨 РЕГИСТРАЦИЯ ОТКРЫЛАСЬ!!! СРОЧНО ЗАХОДИ НА САЙТ!!! 🚨🚨🚨"
+        )
+        await asyncio.sleep(2)
+
+    # ссылка
+    await bot.send_message(
+        chat_id=CHAT_ID,
+        text=f"Ссылка:\n{BASE_URL}?page={page}"
+    )
+
+    # напоминание
+    await asyncio.sleep(10)
+
+    await bot.send_message(
+        chat_id=CHAT_ID,
+        text="Ты успел зайти???"
+    )
+
+
 async def check():
-    global previous_status
+    global previous_status, open_confirm
 
-    async with aiohttp.ClientSession() as session:
+    timeout = aiohttp.ClientTimeout(total=30)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         while True:
-            try:
-                log("Новая проверка сайта")
-                current_status = await get_status(session)
+            current_status = await get_status(session)
 
-                # если ошибка/403 → пропускаем
-                if current_status is None:
-                    log("Пропуск проверки (ошибка или блок)")
-                    await asyncio.sleep(CHECK_INTERVAL)
-                    continue
+            if not previous_status:
+                previous_status = current_status
+                print("Первичная проверка выполнена")
 
-                # первый запуск
-                if not previous_status:
-                    previous_status = current_status
-                    log("Первичная проверка выполнена")
+            else:
+                for page in current_status:
+                    if page not in open_confirm:
+                        open_confirm[page] = 0
 
-                else:
-                    for page in current_status:
-                        if (
-                            page in previous_status
-                            and previous_status[page] == 1
-                            and current_status[page] == 0
-                        ):
-                            log(f"🔥 ОТКРЫЛОСЬ на странице {page}")
+                    if current_status[page] == 0:
+                        open_confirm[page] += 1
+                    else:
+                        open_confirm[page] = 0
 
-                            await bot.send_message(
-                                chat_id=CHAT_ID,
-                                text=f"🚨 РЕГИСТРАЦИЯ ОТКРЫЛАСЬ!\nСтраница: {page}\n{BASE_URL}?page={page}"
-                            )
+                    if (
+                        open_confirm[page] >= 2
+                        and previous_status.get(page) == 1
+                    ):
+                        print("ОТКРЫЛОСЬ на странице", page)
+                        await notify_open(page)
+                        open_confirm[page] = 0
 
-                    previous_status = current_status
+                previous_status = current_status
 
-            except Exception as e:
-                log(f"Критическая ошибка: {e}")
-                await bot.send_message(chat_id=CHAT_ID, text=f"Ошибка: {e}")
-
-            log(f"Жду {CHECK_INTERVAL} секунд")
+            print("Проверка завершена")
             await asyncio.sleep(CHECK_INTERVAL)
 
 
 async def main():
-    log("Бот запущен")
-    await bot.send_message(chat_id=CHAT_ID, text="Бот запущен и следит за Agropraktika")
+    await bot.send_message(chat_id=CHAT_ID, text="Бот запущен и следит за вакансиями 24/7")
     await check()
 
 
